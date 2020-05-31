@@ -19,8 +19,9 @@ If you are searching for a ROS controlled simulation for the Niryo One in Coppel
 5. If the ROS master was found, then a class of topics for each robot should have appeared. 
 6. You can now publish and subscribe data to these topics using 'rostopic'.
 
-Example: Close and open the Gripper. 
+#### Example: Close and open the Gripper. 
 
-'rostopipub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: false" # Open the gripper for Niryo with robotID 0.'
-
-'rostopipub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: true" # Close the gripper for Niryo with robotID 0.'
+```
+rostopipub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: false" # Open the gripper for Niryo with robotID 0.
+rostopipub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: true" # Close the gripper for Niryo with robotID 0.
+```
