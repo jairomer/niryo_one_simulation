@@ -22,6 +22,6 @@ If you are searching for a ROS controlled simulation for the Niryo One in Coppel
 #### Example: Close and open the Gripper. 
 
 ```
-rostopipub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: false" # Open the gripper for Niryo with robotID 0.
-rostopipub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: true" # Close the gripper for Niryo with robotID 0.
+rostopic pub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: false" # Open the gripper for Niryo with robotID 0.
+rostopic pub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: true" # Close the gripper for Niryo with robotID 0.
 ```
