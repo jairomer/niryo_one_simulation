@@ -85,17 +85,27 @@ function gripperCommandCallback(msg)
 end
 
 function targetJointAngularPositionCallback(msg)
-    print(robotID..": Received new target position.")
+    local newValues = msg.data -- float64[]
+    local concat_val = "" 
+    for i=1, #newValues do
+        concat_val = concat_val.." "..newValues[i]
+    end
+    print(robotID..": Received new target position: ")
+
     local newValues = msg.data -- float64[] 
     for i=1,#newValues do
-        targetJointPosition[i] = newValues[i] 
+        targetJointPosition[i] = newValues[i]
+        if sim.setJointTargetPosition(jointHandles[i], targetJointPosition[i]) == -1 then
+            print("<font color='#F00'>Cannot set joint to target position:  ".. targetJointPosition[i] .." </font>@html")
+        end 
     end
 
-    -- Execute movement. TODO: Do something with return values.
-    local result = {
-        sim.rmlMoveToJointPositions(jointHandles,-1,currentVel,currentAccel,maxVel,maxAccel,maxJerk,targetJointPosition,targetVel)
-    }
-    sim.wait(result["timeLeft"]) -- Needs to block other orders until the action is executed.
+    -- Call Movement library to move the robot to the target location.
+
+    --proc = coroutine.wrap(function () 
+    --    sim.rmlMoveToJointPositions(jointHandles,-1,currentVel,currentAccel,maxVel,maxAccel,maxJerk,targetJointPosition,targetVel)
+    --end)
+    --coroutine.resume(proc)
 end
 
 --------------------------
@@ -117,12 +127,13 @@ function sysCall_actuation()
         simROS.publish(currentJointVelPub, {data=currentVel})
         simROS.publish(currentJointAccelPub, {data=currentAccel})
         simROS.publish(targetJointPosPub, {data=targetJointPosition})
+        simROS.publish(currentJointPositionPub, {data=currentJointPosition})
+        simROS.publish(simTimePub, {data=sim.getSimulationTime()})
     end
 end
 
 
 function sysCall_init()
-    sim.setThreadAutomaticSwitch(false) -- Deactivates thread switching during initialization. 
     -- Robot ID: To be set to different IDs in case we have a scene with different Niryo One robots. 
     --      This is then used to differentiate the topics on a ROS distributed system. 
     robotID = 0
@@ -143,31 +154,24 @@ function sysCall_init()
     end
 
     if simROS then 
-
-        if initialized_robot ~= nil and initialized_robot[robotID] then 
-            -- Enter robot simulation loop. 
-            while(true) do
-                actuation_loop_body()
-                -- Once this loop body has been executed once, allow automatic 
-                -- thread switch, which will be inmediate. 
-                sim.setThreadAutomaticSwitch(true)
-            end
-        else
-            -- Not initalized. 
-            if initialized_robot == nil then
-                -- First robot to initialize.
-                initialized_robot = {}
-                initialized_robot[robotID] = false
-            else 
-                -- Not the first robot to initialize. 
-                initialized_robot[robotID] = true
-            end
+        -- Not initalized. 
+        if initialized_robot == nil then
+            -- First robot to initialize.
+            initialized_robot = {}
+            initialized_robot[robotID] = false
+        end
+        if initialized_robot[robotID] then 
+            print("<font color='#F00'>Existing robot with same ID. Cannot run.</font>@html")
+            return
+        else 
+            -- Not the first robot to initialize, clear robot ID
+            initialized_robot[robotID] = true
         end
 
         print("<font color='#0F0'>ROS interface was found.</font>@html")
 
         simulationTopicRoot = "/coppeliaSIM/NiryoOne_"..robotID
-        simulationTimePublisher = simulationTopicRoot.."/simulationTime"
+        simulationTimePublisher = simulationTopicRoot.."/simulationTime" --TODO
         -- Constant Hyperparameters Topic Names
         maxVelocityConstantSub = simulationTopicRoot.."/maximumVelocityConstantSub"
         maxVelocityConstantPub = simulationTopicRoot.."/maximumVelocityConstantPub"
@@ -185,6 +189,7 @@ function sysCall_init()
         -- Robot State Topic Names 
         currentJointAngularVelocityPub = simulationTopicRoot.."/currentJointAngularVelocityPub"
         currentJointAngularAccelPub = simulationTopicRoot.."/currentJointAngularAccelerationPub"
+        currentJointAngularPosition = simulationTopicRoot.."/currentJointAngularPosition"
         targetPositionReachedPub = simulationTopicRoot.."/targetPositionIsCurrentPositionPub"
         targetJointAngularPositionPub = simulationTopicRoot.."/targetJointAngularPositionPub"
         targetJointAngularPositionSub = simulationTopicRoot.."/targetJointAngularPositionSub"
@@ -257,7 +262,10 @@ function sysCall_init()
         -- The desired velocity of the joints at the target. Can be nil in which case a velocity vector of 0 is used.
         --      In our case, we want to use a motion library, so this could be nil. We will ignore it. 
         targetVel={0,0,0,0,0,0}
-        
+
+        -- Simulation time.
+        simTimePub = simROS.advertise(simulationTimePublisher, 'std_msgs/Float32')
+
         -- The target angular position we want the joints in. TODO: Still need to figure out how to model this.
         --      This needs a publisher and a subscriber.
         targetJointPosition = {90*math.pi/180,-54*math.pi/180,0*math.pi/180,0*math.pi/180,-36*math.pi/180,-90*math.pi/180}
@@ -265,6 +273,8 @@ function sysCall_init()
         targetJointPosSub = simROS.subscribe(targetJointAngularPositionSub, 'std_msgs/Float64MultiArray', 'targetJointAngularPositionCallback')
         --targetJointPositionIsCurrentPosition = true -- Indicates if the target position has been reached.
 
+        currentJointPosition = {0, 0, 0, 0, 0, 0}
+        currentJointPositionPub = simROS.advertise(currentJointAngularPosition, 'std_msgs/Float64MultiArray')
         -- GripperController
         isGripperOpen = true -- Open at startup.
         gripperStatePublisher = simROS.advertise(gripperStatePub, 'std_msgs/Bool')
@@ -273,13 +283,10 @@ function sysCall_init()
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
     end
-
-    sim.switchThread() -- Explicitely switch to another thread now!
-
 end
 
 function sysCall_sensing()
-    -- put your sensing code here
+    -- Update the data structures of the simulation.
 end
 
 function sysCall_cleanup()
