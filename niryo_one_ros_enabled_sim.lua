@@ -27,41 +27,68 @@ function open_gripper()
     sim.clearIntegerSignal(gripperName..'_close')
 end
 
+function setTargetJointPositions(targetVector)
+    for i=1,#targetVector do
+        if sim.setJointTargetPosition(jointHandles[i], targetVector[i]) == -1 then
+            print("<font color='#F00'>Cannot set joint to target position:  ".. targetVector[i] .." </font>@html")
+        end 
+    end
+end
+
+function setTargetJointVelocity(targetVector)
+    for i=1,#targetVector do
+        if sim.setJointTargetVelocity(jointHandles[i], targetVector[i]) then
+            print("<font color='#F00'>Cannot set joint to target velocity:  ".. targetVector[i] .." </font>@html")
+        end 
+    end
+end
+
+function setTargetJointForce(targetVector)
+    for i=1,#targetVector do
+        if sim.setJointTargetForce(jointHandles[i], targetVector[i]) then
+            print("<font color='#F00'>Cannot set joint to target force:  ".. targetVector[i] .." </font>@html")
+        end 
+    end
+end
+
+function updateJointVelocityVector() 
+    for i=1,#targetVel do
+         targetVel[i] = sim.getJointTargetVelocity(jointHandles[i])
+    end
+end 
+
+function updateJointPositionVector() 
+    for i=1,#targetJointPosition do
+         targetJointPosition[i] = sim.getJointTargetPosition(jointHandles[i])
+    end
+end 
+
+function updateJointForceVector()
+    for i=1,#targetJointForce do
+        targetJointForce[i] = sim.getJointForce(jointHandles[i])
+    end
+end
+
 --------------------------
 -- SUBSCRIBER CALLBACKS --
 --------------------------
 
-function setMaxVelConstantCallback(msg) 
-    vel = msg.data
-end 
-
-function setMaxAccelConstantCallback(msg) 
-    accel = msg.data
-end 
-
-function setMaxJerkConstantCallback(msg) 
-    jerk = msg.data
-end 
-
-function setMaxVelVectorCallback(msg) 
-    local newValues = msg.data -- float64[] 
-    for i=1,#newValues do
-        maxVel[i] = newValues[i] 
-    end
+function setTargetJointAngularVelVectorCallback(msg) 
+    setTargetJointVelocity(msg.data)
 end
 
-function setMaxAccelVectorCallback(msg) 
-    local newValues = msg.data -- float64[] 
-    for i=1,#newValues do
-        maxAccel[i] = newValues[i] 
+function targetJointAngularPositionCallback(msg)
+    local newValues = msg.data -- float64[]
+    local concat_val = "" 
+    for i=1, #newValues do
+        concat_val = concat_val.." "..newValues[i]
     end
+    print(robotID..": Received new target position: "..concat_val)
+    setTargetJointPositions(newValues)   
 end
 
-function setMaxJerkVectorCallback(msg) 
-    local newValues = msg.data -- float64[] 
-    for i=1,#newValues do
-        maxJerk[i] = newValues[i] 
-    end
+function targetJointAngularForceCallback(msg)
+    setTargetJointForce(msg.data)
 end
 
 function gripperCommandCallback(msg)    
@@ -84,29 +111,6 @@ function gripperCommandCallback(msg)
     end
 end
 
-function targetJointAngularPositionCallback(msg)
-    local newValues = msg.data -- float64[]
-    local concat_val = "" 
-    for i=1, #newValues do
-        concat_val = concat_val.." "..newValues[i]
-    end
-    print(robotID..": Received new target position: ")
-
-    local newValues = msg.data -- float64[] 
-    for i=1,#newValues do
-        targetJointPosition[i] = newValues[i]
-        if sim.setJointTargetPosition(jointHandles[i], targetJointPosition[i]) == -1 then
-            print("<font color='#F00'>Cannot set joint to target position:  ".. targetJointPosition[i] .." </font>@html")
-        end 
-    end
-
-    -- Call Movement library to move the robot to the target location.
-
-    --proc = coroutine.wrap(function () 
-    --    sim.rmlMoveToJointPositions(jointHandles,-1,currentVel,currentAccel,maxVel,maxAccel,maxJerk,targetJointPosition,targetVel)
-    --end)
-    --coroutine.resume(proc)
-end
 
 --------------------------
 -- SIMULATION LOOP      -- 
@@ -114,21 +118,11 @@ end
 
 function sysCall_actuation() 
     if simROS then 
-        -- Publish hyperparameter values.
-        simROS.publish(velConstantPub, {data=vel})
-        simROS.publish(accelConstantPub, {data=accel})
-        simROS.publish(jerkConstantPub, {data=jerk})
-        simROS.publish(maxVelJointVectorPub, {data=maxVel})
-        simROS.publish(maxAccelJointVectorPub, {data=maxAccel})
-        simROS.publish(maxJerkJointVectorPub, {data=maxJerk})
-
-        -- Robot simulation state.
-        simROS.publish(gripperStatePublisher, {data=isGripperOpen})
-        simROS.publish(currentJointVelPub, {data=currentVel})
-        simROS.publish(currentJointAccelPub, {data=currentAccel})
-        simROS.publish(targetJointPosPub, {data=targetJointPosition})
-        simROS.publish(currentJointPositionPub, {data=currentJointPosition})
-        simROS.publish(simTimePub, {data=sim.getSimulationTime()})
+        simROS.publish(gripperStatePublisher,   {data=isGripperOpen})
+        simROS.publish(targetJointPosPub,       {data=targetJointPosition})
+        simROS.publish(simTimePub,              {data=sim.getSimulationTime()})
+        simROS.publish(targetJointVelPub,       {data=targetVel})
+        simROS.publish(targetForcePub,          {data=targetJointForce})
     end
 end
 
@@ -139,7 +133,6 @@ function sysCall_init()
     robotID = 0
 
     -- Generate the handles of the joints to actuate on the robot.
-    -- TODO: This might cause a career condition. 
     jointHandles={-1,-1,-1,-1,-1,-1}
     for i=1,6,1 do
         jointHandles[i]=sim.getObjectHandle('NiryoOneJoint'..i)
@@ -171,114 +164,46 @@ function sysCall_init()
         print("<font color='#0F0'>ROS interface was found.</font>@html")
 
         simulationTopicRoot = "/coppeliaSIM/NiryoOne_"..robotID
-        simulationTimePublisher = simulationTopicRoot.."/simulationTime" --TODO
-        -- Constant Hyperparameters Topic Names
-        maxVelocityConstantSub = simulationTopicRoot.."/maximumVelocityConstantSub"
-        maxVelocityConstantPub = simulationTopicRoot.."/maximumVelocityConstantPub"
-        maxAccelerationConstantSub = simulationTopicRoot.."/maximumAccelerationConstantSub"
-        maxAccelerationConstantPub = simulationTopicRoot.."/maximumAccelerationConstantPub"
-        maxJerkConstantSub = simulationTopicRoot.."/maxJerkConstantSub"
-        maxJerkConstantPub = simulationTopicRoot.."/maxJerkConstantPub"
-        -- Vector Hyperparameters Topic Names 
-        maxJointAngularVelocityVectorSub = simulationTopicRoot.."/maxJointAngularVelocityVectorSub"
-        maxJointAngularVelocityVectorPub = simulationTopicRoot.."/maxJointAngularVelocityVectorPub"
-        maxJointAngularAccelerationVectorSub = simulationTopicRoot.."/maxJointAngularAccelerationyVectorSub"
-        maxJointAngularAccelerationVectorPub = simulationTopicRoot.."/maxJointAngularAccelerationVectorPub"
-        maxJointAngularJerkVectorSub = simulationTopicRoot.."/maxJointAngularJerkVectorSub"
-        maxJointAngularJerkVectorPub = simulationTopicRoot.."/maxJointAngularJerkVectorPub"
+        simulationTimePublisher = simulationTopicRoot.."/simulationTime" 
+
         -- Robot State Topic Names 
-        currentJointAngularVelocityPub = simulationTopicRoot.."/currentJointAngularVelocityPub"
-        currentJointAngularAccelPub = simulationTopicRoot.."/currentJointAngularAccelerationPub"
-        currentJointAngularPosition = simulationTopicRoot.."/currentJointAngularPosition"
-        targetPositionReachedPub = simulationTopicRoot.."/targetPositionIsCurrentPositionPub"
-        targetJointAngularPositionPub = simulationTopicRoot.."/targetJointAngularPositionPub"
-        targetJointAngularPositionSub = simulationTopicRoot.."/targetJointAngularPositionSub"
+        targetJointAngularVelocityPub = simulationTopicRoot.."/targetJointAngularVelocityPub"
+        targetJointAngularVelocitySub = simulationTopicRoot.."/targetJointAngularVelocitySub"
+        targetJointAngularPositionPub  = simulationTopicRoot.."/targetJointAngularPositionPub"
+        targetJointAngularPositionSub  = simulationTopicRoot.."/targetJointAngularPositionSub"
+        targetJointAngularForcePub = simulationTopicRoot.."/targetJointAngularForcePub"
+        targetJointAngularForceSub = simulationTopicRoot.."/targetJointAngularForceSub"
         -- Gripper Control Topic Names 
         gripperStatePub = simulationTopicRoot.."/isGripperOpenPub" 
-        openGripperSub = simulationTopicRoot.."/GripperCommandSub"
-
-        -- Set-up some of the RML vectors:
-        -- Remember that variables are globally accessible in LUA by default.
-
-        --------------------------------
-        -- Simulation Hyperparameters --
-        --------------------------------
-
-        -- These are the hyperparameters of the simulation, in theory they should be adapted to the values in
-        -- from the real robot. Otherwise, the final movement trayectories will be different.
-        --  PROBLEM: We do not know the real value of these parameters on the physical robot. 
-        --      IDEA: We could setup a machine learning model to minimize the difference between the assigned values
-        --            for the simulation, and the real behaviour of the physical twin. 
-        
-        -- We need topics to set and subscribe to these values. 
-        vel=20      -- Maximum velocity.
-        velConstantPub = simROS.advertise(maxVelocityConstantPub, 'std_msgs/Int64')
-        velConstantSub = simROS.subscribe(maxVelocityConstantSub, 'std_msgs/Int64', 'setMaxVelConstantCallback')
-
-        accel=40    -- Maximum acceleration.
-        accelConstantPub = simROS.advertise(maxAccelerationConstantPub, 'std_msgs/Int64')
-        accelConstantSub = simROS.subscribe(maxAccelerationConstantSub, 'std_msgs/Int64', 'setMaxAccelConstantCallback')
-
-        jerk=80     -- Maximum jerk.
-        jerkConstantPub = simROS.advertise(maxJerkConstantPub, 'std_msgs/Int64')
-        jerkConstantSub = simROS.subscribe(maxJerkConstantSub, 'std_msgs/Int64', 'setMaxJerkConstantCallback')
-      
-
-        -- PROBLEM: These vectors assume that all axis have the same physical properties. This may not be true.
-        --      See previous IDEA.
-
-        -- The maximum allowed angular velocity of the joints.
-        --      We need a topic to set it and another to read it. 
-        maxVel={vel*math.pi/180,vel*math.pi/180,vel*math.pi/180,vel*math.pi/180,vel*math.pi/180,vel*math.pi/180}
-        maxVelJointVectorPub = simROS.advertise(maxJointAngularVelocityVectorPub, 'std_msgs/Float64MultiArray')
-        maxVelJointVectorSub = simROS.subscribe(maxJointAngularVelocityVectorSub, 'std_msgs/Float64MultiArray', 'setMaxVelVectorCallback')
-
-        -- The maximum allowed angular acceleration of the joints.
-        --      We need a topic to set it and another to read it.
-        maxAccel={accel*math.pi/180,accel*math.pi/180,accel*math.pi/180,accel*math.pi/180,accel*math.pi/180,accel*math.pi/180}
-        maxAccelJointVectorPub = simROS.advertise(maxJointAngularAccelerationVectorPub, 'std_msgs/Float64MultiArray')
-        maxAccelJointVectorSub = simROS.subscribe(maxJointAngularAccelerationVectorSub, 'std_msgs/Float64MultiArray', 'setMaxAccelVectorCallback')
-
-        -- The maximum allowed angular jerk of the joints.
-        --      We need a topic to set it and another to read it.
-        maxJerk={jerk*math.pi/180,jerk*math.pi/180,jerk*math.pi/180,jerk*math.pi/180,jerk*math.pi/180,jerk*math.pi/180}
-        maxJerkJointVectorPub = simROS.advertise(maxJointAngularJerkVectorPub, 'std_msgs/Float64MultiArray')
-        maxJerkJointVectorSub = simROS.subscribe(maxJointAngularJerkVectorSub, 'std_msgs/Float64MultiArray', 'setMaxJerkVectorCallback')
+        openGripperSub  = simulationTopicRoot.."/GripperCommandSub"
 
         ---------------------------
         -- Simulation Variables  --
         ---------------------------
 
-        -- The current velocity of the joints. Can be nil in which case a velocity vector of 0 is used.
-        --      This vector needs a publisher. 
-        currentVel={0,0,0,0,0,0,0}
-        currentJointVelPub = simROS.advertise(currentJointAngularVelocityPub, 'std_msgs/Float64MultiArray')
-
-        -- The current acceleration of the joints. Can be nil in which case an acceleration vector of 0 is used.
-        --      This vector needs a publisher. 
-        currentAccel={0,0,0,0,0,0,0}
-        currentJointAccelPub = simROS.advertise(currentJointAngularAccelPub, 'std_msgs/Float64MultiArray')
-        
-        -- The desired velocity of the joints at the target. Can be nil in which case a velocity vector of 0 is used.
-        --      In our case, we want to use a motion library, so this could be nil. We will ignore it. 
+        -- The target velocity of the joints.
         targetVel={0,0,0,0,0,0}
+        targetJointVelPub = simROS.advertise(targetJointAngularVelocityPub, 'std_msgs/Float64MultiArray')
+        targetJointVelSub = simROS.subscribe(targetJointAngularVelocitySub, 'std_msgs/Float64MultiArray', 'setTargetJointAngularVelVectorCallback')
 
         -- Simulation time.
         simTimePub = simROS.advertise(simulationTimePublisher, 'std_msgs/Float32')
 
-        -- The target angular position we want the joints in. TODO: Still need to figure out how to model this.
-        --      This needs a publisher and a subscriber.
-        targetJointPosition = {90*math.pi/180,-54*math.pi/180,0*math.pi/180,0*math.pi/180,-36*math.pi/180,-90*math.pi/180}
+        -- The target angular position we want the joints in.
+        targetJointPosition = {0,0,0,0,0,0}
+        setTargetJointPositions(targetJointPosition)
         targetJointPosPub = simROS.advertise(targetJointAngularPositionPub, 'std_msgs/Float64MultiArray')
         targetJointPosSub = simROS.subscribe(targetJointAngularPositionSub, 'std_msgs/Float64MultiArray', 'targetJointAngularPositionCallback')
-        --targetJointPositionIsCurrentPosition = true -- Indicates if the target position has been reached.
 
-        currentJointPosition = {0, 0, 0, 0, 0, 0}
-        currentJointPositionPub = simROS.advertise(currentJointAngularPosition, 'std_msgs/Float64MultiArray')
+        -- The target force of the joints. 
+        targetJointForce = {0,0,0,0,0,0}
+        targetForcePub = simROS.advertise(targetJointAngularForcePub, 'std_msgs/Float64MultiArray')
+        targetForceSub = simROS.subscribe(targetJointAngularForceSub, 'std_msgs/Float64MultiArray', "targetJointAngularForceCallback")
+
         -- GripperController
         isGripperOpen = true -- Open at startup.
-        gripperStatePublisher = simROS.advertise(gripperStatePub, 'std_msgs/Bool')
-        openGripperCommand = simROS.subscribe(openGripperSub, 'std_msgs/Bool', 'gripperCommandCallback')
+        gripperStatePublisher   = simROS.advertise(gripperStatePub, 'std_msgs/Bool')
+        openGripperCommand      = simROS.subscribe(openGripperSub, 'std_msgs/Bool', 'gripperCommandCallback')
 
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
@@ -286,11 +211,26 @@ function sysCall_init()
 end
 
 function sysCall_sensing()
-    -- Update the data structures of the simulation.
+    -- Update additional data structures of the simulation.
+    updateJointForceVector()
+    updateJointVelocityVector()
+    updateJointPositionVector()
 end
 
 function sysCall_cleanup()
-    -- do some clean-up here
+    simROS.shutdownPublisher(targetJointVelPub)
+    simROS.shutdownSubscriber(targetJointVelSub)
+
+    simROS.shutdownPublisher(targetJointPosPub)
+    simROS.shutdownSubscriber(targetJointPosSub)
+
+    simROS.shutdownPublisher(targetForcePub)
+    simROS.shutdownSubscriber(targetForceSub)
+
+    simROS.shutdownPublisher(simTimePub)
+
+    simROS.shutdownPublisher(gripperStatePublisher)
+    simROS.shutdownSubscriber(openGripperCommand)
 end
 
 
