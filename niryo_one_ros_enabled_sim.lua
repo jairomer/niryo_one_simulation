@@ -91,6 +91,7 @@ end
 function phyJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
     -- Update the model and propagate the state variables. 
+    print("Received new joint state: "..msg.position)
     setTargetJointPositions(msg.position);
     --setTargetJointVelocity(jointVel);
     --setTargetJointForce(jointEff);
