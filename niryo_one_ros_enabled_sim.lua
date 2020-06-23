@@ -32,20 +32,11 @@ end
 
 function setTargetJointPositions(remoteTargetVector)
     local targetVector = remoteTargetVector
-    local s = 10; -- Execute each joint movement in 10 steps. 
-
-    local steps        = {0,0,0,0,0,0}
-    for i=1, #steps do 
-        steps[i] = targetVector[i]/s
-    end
-    for i=1, s do
-        for i=1,#targetVector do
-            steps[i] = steps[i] + targetVector[i]/s
-            if sim.setJointTargetPosition(JointHandles[i], steps[i]) == -1 then
-                print("<font color='#F00'>Cannot set joint to target position:  ".. targetVector[i] .." </font>@html")
-            end 
+    for i=1,#targetVector do
+        if sim.setJointTargetPosition(JointHandles[i], targetVector[i]) == -1 then
+            print("<font color='#F00'>Cannot set joint to target position:  ".. targetVector[i] .." </font>@html")
         end 
-    end
+    end 
 end
 
 function setTargetJointVelocity(targetVector)
@@ -66,20 +57,20 @@ function setTargetJointForce(targetVector)
     end
 end
 
-function updateJointVelocityVector() 
-    for i=1,#targetVel do
-         sim.getJointTargetVelocity(JointHandles[i], targetVel[i])
+function getJointVelocityVector(targetVel) 
+    for i=1,6 do
+        targetVel[i] = sim.getJointTargetVelocity(JointHandles[i])
     end
 end 
 
-function updateJointPositionVector() 
-    for i=1,#targetJointPosition do
-         sim.getJointPosition(JointHandles[i], targetJointPosition[i])
+function getJointPositionVector(targetJointPosition) 
+    for i=1,6 do
+        targetJointPosition[i] = sim.getJointPosition(JointHandles[i])
     end
 end 
 
-function updateJointForceVector()
-    for i=1,#targetJointForce do
+function getJointForceVector(targetJointForce)
+    for i=1,6 do
         targetJointForce[i] = sim.getJointForce(JointHandles[i])
     end
 end
@@ -91,22 +82,22 @@ end
 function phyJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
     -- Update the model and propagate the state variables. 
-    print("Received new joint state: "..msg.position)
-    setTargetJointPositions(msg.position);
-    --setTargetJointVelocity(jointVel);
-    --setTargetJointForce(jointEff);
-
+    if subscribe_mode then 
+        setTargetJointPositions(msg.position);
+    end
 end 
 
 function digJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
     -- Update the model and propagate the state variables.
-    setTargetJointPositions(msg.position);
-    --setTargetJointVelocity(jointVel);
-    --setTargetJointForce(jointEff);
-
+    if (is_pure_subscriber == false) then 
+        setTargetJointPositions(msg.data);
+    end
 end 
 
+function setSubModeCallback(msg)
+    is_pure_subscriber = msg.data;
+end
 
 function gripperCommandCallback(msg)    
     if msg.data then 
@@ -136,6 +127,19 @@ function sysCall_actuation()
     if simROS then 
         simROS.publish(gripperStatePublisher,   {data=isGripperOpen})
         simROS.publish(simTimePub,              {data=sim.getSimulationTime()})
+        
+        pos = {0, 0, 0, 0, 0, 0}
+        vel = {0, 0, 0, 0, 0, 0}
+        eff = {0, 0, 0, 0, 0, 0}
+        getJointPositionVector(pos)
+        getJointVelocityVector(vel)
+        getJointForceVector(eff)
+        simROS.publish(JointStatePubDig, {
+            position = pos, 
+            velocity = vel, 
+            effort   = eff 
+        })
+
     end
 end
 
@@ -165,10 +169,11 @@ function sysCall_init()
         SIM_TOPIC_ROOT = "/coppeliaSIM/NiryoOne"
         SIM_TIME_TOPIC = SIM_TOPIC_ROOT.."/simulationTime" 
         SIM_JOINT_STATE_TOPIC = SIM_TOPIC_ROOT.."/joint_states"
-        
+        SIM_JOINT_STATE_ORDER = SIM_TOPIC_ROOT.."/joint_states_order"
+        SIM_SUBS_MODE = SIM_TOPIC_ROOT.."/set_subscriber_mode"
+
         -- Physical Twin Topics TODO: Gripper
         JOINT_STATE_TOPIC = "/joint_states"
-        JOINT_TRAJECTORY_ACTION_TOPIC = "/FollowJointTrajectoryAction"
 
         -- Gripper Control Topic Names 
         gripperStatePub = SIM_TOPIC_ROOT.."/isGripperOpenPub" 
@@ -189,12 +194,15 @@ function sysCall_init()
         --  for the physical. We will assume that the control comes from the LUA script.
 
         -- Physical Twin Mirror --> Mirror state published by the physical twin.
-        JointStatePubPhy = simROS.advertise(JOINT_STATE_TOPIC, 'sensor_msgs/JointState')
         JointStateSubPhy = simROS.subscribe(JOINT_STATE_TOPIC, 'sensor_msgs/JointState', 'phyJointStateUpdateCallback')
 
-        -- Digital Twin Mirror --> Receive desired state from a simulation client.
-        JointStatePubDig = simROS.advertise(SIM_JOINT_STATE_TOPIC, 'sensor_msgs/JointState')
-        JointStateSubDig = simROS.subscribe(SIM_JOINT_STATE_TOPIC, 'sensor_msgs/JointState', 'digJointStateUpdateCallback')
+        -- Digital Twin Mirror --> Receive desired state from a simulation client and send back 
+        --                         joint state.
+        JointStatePubDig = simROS.advertise(SIM_JOINT_STATE_TOPIC,'sensor_msgs/JointState')
+        JointStateSubDig = simROS.subscribe(SIM_JOINT_STATE_ORDER, 'std_msgs/Float64MultiArray', 'digJointStateUpdateCallback')
+
+        setPureSubscriberSub = simROS.subscribe(SIM_SUBS_MODE, 'std_msgs/Bool', 'setSubModeCallback')
+        is_pure_subscriber = false;
 
         -- GripperController --> Receive desired state from a simulation client.
         isGripperOpen = true -- Open at startup. TODO: Get from physical twin.
@@ -213,9 +221,9 @@ end
 
 function sysCall_cleanup()
     simROS.shutdownPublisher(simTimePub)
-    simROS.shutdownPublisher(JointStatePubPhy)
     simROS.shutdownSubscriber(JointStateSubPhy)
     simROS.shutdownPublisher(JointStatePubDig)
+    simROS.shutdownSubscriber(setPureSubscriberSub)
     simROS.shutdownSubscriber(JointStateSubDig)
     simROS.shutdownPublisher(gripperStatePublisher)
     simROS.shutdownSubscriber(openGripperCommand)
