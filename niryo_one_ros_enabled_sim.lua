@@ -23,10 +23,12 @@
 ------------------------------------------------------------------
 
 function closeGripper()
+    print("Closing gripper.")
     sim.setIntegerSignal(gripperName..'_close',1)
 end
 
 function openGripper()
+    print("Opening gripper.")
     sim.clearIntegerSignal(gripperName..'_close')
 end
 
@@ -81,21 +83,28 @@ end
 
 function phyJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
-    -- Update the model and propagate the state variables. 
-    if subscribe_mode then 
-        setTargetJointPositions(msg.position);
+    -- Update the model and propagate the state variables.
+    print("Received joint state update from the physical twin.")  
+    if is_pure_subscriber then 
+        table.insert(state_sequence_buffer, msg.position)
+    else
+        print("Digital twin not in pure subscriber mode.")
     end
 end 
 
 function digJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
     -- Update the model and propagate the state variables.
+    print("Received joint state update for digital twin.")
     if (is_pure_subscriber == false) then 
-        setTargetJointPositions(msg.data);
+        table.insert(state_sequence_buffer, msg.position)
+    else 
+        print("Cannot change digital twin if in pure subscriber mode.")
     end
 end 
 
 function setSubModeCallback(msg)
+    print("Subscriber mode: "..(msg.data and "True" or "False"))
     is_pure_subscriber = msg.data;
 end
 
@@ -139,7 +148,12 @@ function sysCall_actuation()
             velocity = vel, 
             effort   = eff 
         })
-
+        if #state_sequence_buffer>0 then
+            print("Setting joint positions on digital twin.")
+            new_joint_state = state_sequence_buffer[1] -- Get the first element.
+            table.remove(state_sequence_buffer, 1) -- consume it.
+            setTargetJointPositions(new_joint_state);
+        end
     end
 end
 
@@ -192,6 +206,11 @@ function sysCall_init()
 
         -- TODO: We need to publish the current state of the digital twin as a desired state 
         --  for the physical. We will assume that the control comes from the LUA script.
+        -- PROBLEM: Control cannot come from the lua script due to the limitations of the environment.
+
+        -- This is a queue to temporarily store the states arriving to the digital twin when in 
+        -- pure subscriber mode. 
+        state_sequence_buffer = {}
 
         -- Physical Twin Mirror --> Mirror state published by the physical twin.
         JointStateSubPhy = simROS.subscribe(JOINT_STATE_TOPIC, 'sensor_msgs/JointState', 'phyJointStateUpdateCallback')
@@ -217,6 +236,7 @@ function sysCall_sensing()
     -- Update additional data structures of the simulation.
     -- TODO: For now we want a full simulation subscriber of the physical robot.
     --      We need to send a signal to the JOINT_TRAJECTORY_ACTION_TOPIC.
+
 end
 
 function sysCall_cleanup()
