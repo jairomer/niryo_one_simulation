@@ -4,6 +4,8 @@
 FROM ubuntu:16.04
 MAINTAINER jairomer@protonmail.com
 
+COPY hosts /etc/hosts
+
 WORKDIR /root
 RUN useradd -ms /bin/bash dtwin
 
@@ -51,6 +53,11 @@ RUN wget http://www.coppeliarobotics.com/files/CoppeliaSim_Pro_V4_0_0_Ubuntu16_0
 # program root in order to be loaded. 
 RUN cp CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/compiledRosPlugins/libsimExtROSInterface.so CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/libsimExtROSInterface.so 
 # Roscore must be running for the ROS interface to load successfully. 
-RUN echo "source /opt/ros/kinetic/setup.bash" >> ~/.bashrc
+RUN     { echo export ROS_HOSTNAME=$(ip a show eth0 | grep "inet " | awk '{print $2}'); \
+	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh; } > \
+	/home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh.new && \
+	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh.new > \
+	/home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh && \
+	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh
 
 CMD bash -c "source /opt/ros/kinetic/setup.bash && /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh"
