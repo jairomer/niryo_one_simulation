@@ -4,8 +4,6 @@
 FROM ubuntu:16.04
 MAINTAINER jairomer@protonmail.com
 
-COPY hosts /etc/hosts
-
 WORKDIR /root
 RUN useradd -ms /bin/bash dtwin
 
@@ -39,8 +37,6 @@ RUN pip3 install -U catkin_tools
 # "rosdep" enables you to easily install system dependencies for source you want 
 # to compile and is required to run some core components in ROS. 
 RUN rosdep init
-#RUN echo "127.0.0.1 localhost dtwin" > /etc/hosts 
-COPY hosts /etc/hosts
 
 USER dtwin
 WORKDIR /home/dtwin
@@ -53,7 +49,8 @@ RUN wget http://www.coppeliarobotics.com/files/CoppeliaSim_Pro_V4_0_0_Ubuntu16_0
 # program root in order to be loaded. 
 RUN cp CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/compiledRosPlugins/libsimExtROSInterface.so CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/libsimExtROSInterface.so 
 # Roscore must be running for the ROS interface to load successfully. 
-RUN     { echo export ROS_HOSTNAME=$(ip a show eth0 | grep "inet " | awk '{print $2}'); \
+#RUN     { echo export ROS_HOSTNAME=$(ip a show eth0 | grep "inet " | awk '{print $2}'); \
+RUN     { echo export ROS_HOSTNAME=192.168.0.161; \
 	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh; } > \
 	/home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh.new && \
 	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh.new > \

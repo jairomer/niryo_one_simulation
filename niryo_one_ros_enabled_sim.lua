@@ -221,7 +221,7 @@ function sysCall_init()
         JointStateSubDig = simROS.subscribe(SIM_JOINT_STATE_ORDER, 'std_msgs/Float64MultiArray', 'digJointStateUpdateCallback')
 
         setPureSubscriberSub = simROS.subscribe(SIM_SUBS_MODE, 'std_msgs/Bool', 'setSubModeCallback')
-        is_pure_subscriber = false;
+        is_pure_subscriber = true;
 
         -- GripperController --> Receive desired state from a simulation client.
         isGripperOpen = true -- Open at startup. TODO: Get from physical twin.
