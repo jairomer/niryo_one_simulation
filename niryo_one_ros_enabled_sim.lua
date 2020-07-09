@@ -108,7 +108,21 @@ function setSubModeCallback(msg)
     is_pure_subscriber = msg.data;
 end
 
-function gripperCommandCallback(msg)    
+function gripperPureSubCallback(msg)
+    if not is_pure_subscriber then
+        return
+    end 
+
+    open_button     = msg.buttons[3]
+    close_button    = msg.buttons[2]
+    open_gripper    = (open_button == 1)
+    close_gripper   = (close_button == 1)
+end
+
+function gripperCommandCallback(msg)
+    if is_pure_subscriber then
+        return 
+    end
     if msg.data then 
         if isGripperOpen then
             print("Gripper already open.")
@@ -153,6 +167,15 @@ function sysCall_actuation()
             new_joint_state = state_sequence_buffer[1] -- Get the first element.
             table.remove(state_sequence_buffer, 1) -- consume it.
             setTargetJointPositions(new_joint_state);
+        end
+
+        if open_gripper then 
+            open_gripper = false
+            openGripper()
+        end
+        if close_gripper then
+            close_gripper = false
+            closeGripper()
         end
     end
 end
@@ -224,9 +247,13 @@ function sysCall_init()
         is_pure_subscriber = true;
 
         -- GripperController --> Receive desired state from a simulation client.
-        isGripperOpen = true -- Open at startup. TODO: Get from physical twin.
+        isGripperOpen   = true -- Open at startup. TODO: Get from physical twin.
+        open_gripper     = false
+        close_gripper    = false
         gripperStatePublisher   = simROS.advertise(gripperStatePub, 'std_msgs/Bool')
         openGripperCommand      = simROS.subscribe(openGripperSub, 'std_msgs/Bool', 'gripperCommandCallback')
+        joystickGripperCommand  = simROS.subscribe("/joy", 'sensor_msgs/Joy', 'gripperPureSubCallback')
+
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
     end
@@ -247,6 +274,7 @@ function sysCall_cleanup()
     simROS.shutdownSubscriber(JointStateSubDig)
     simROS.shutdownPublisher(gripperStatePublisher)
     simROS.shutdownSubscriber(openGripperCommand)
+    simROS.shutdownSubscriber(joystickGripperCommand)
 end
 
 
