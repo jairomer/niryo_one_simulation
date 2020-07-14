@@ -5,23 +5,19 @@ If you are searching for a ROS controlled simulation for the Niryo One in Coppel
 
 ## How to use it?
 
-**It is assumed that you have an operational and well configured ROS kinetic environment, so make sure you have a ros master in a well known machine and that the ros interface is being imported as a dynamic library by coppeliaSIM.**
+**It is assumed that you have an operational and well configured ROS kinetic environment, so make sure you have a ROS master in a well known machine.**
 
-0. Start roscore and move the ros library from '.../CoppeliaSim/compiledRosPlugins/' to '.../CoppeliaSim/'. 
-1. Start CoppeliaSim. 
-2. Add as much Niryo One robots as you want. 
-3. On each of them:
-    - Remove the threaded script.
-    - Add a non threaded script. 
-    - Copy the code from the only LUA script on this repository and paste it on the non threaded script. 
-    - Change the robotID variable to a different number on each robot. 
-4. Run the simulation. 
-5. If the ROS master was found, then a class of topics for each robot should have appeared. 
-6. You can now publish and subscribe data to these topics using 'rostopic'.
+0. Prepare for current setup. 
+ - Configuration for the environment is contained in the docker run command on `run_container.sh`
+ - All relevant hosts on the ROS network should be added as hosts. 
+ - Set the ROS master uri to the one on your setup.
+ - Set the ROS ip to the one of the interface connecting to the ROS network.
+ - Connect host to the ROS network with an operational ROS master.
+1. Start CoppeliaSim within ROS environment container: `./run_container.sh`
+ - If the ROS master is unreachable or not operational, the ROS interface will not launch. 
+2. Search for a Niryo One model on the robot list and put it on the simulator. 
+3. Right click on the threaded script, edit, and remove. 
+4. Add a new **Non-Threaded** script.
+5. Copy and paste contents of the lua script in this repository.
+6. Run the simulation and adapt the speed accordingly to achieve realtime feedback.
 
-#### Example: Close and open the Gripper. 
-
-```
-rostopic pub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: false" # Open the gripper for Niryo with robotID 0.
-rostopic pub /coppeliaSIM/NiryoOne_0/GripperCommandSub std_msgs/Bool "data: true" # Close the gripper for Niryo with robotID 0.
-```
