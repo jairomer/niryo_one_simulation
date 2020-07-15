@@ -5,8 +5,8 @@ echo 'Remember that you need to list and add your xauth keys into the Dockerfile
 
 # Networking settings
 ROS_MASTER_URI="http://192.168.0.181:11311"
-ROS_IP="192.168.0.199"
-IFACE="wlp4s0"
+ROS_IP="192.168.0.134"
+IFACE="enp0s8"
 
 XAUTH_KEYS_="$(xauth list $HOST/unix:0)"
 XSOCK=/tmp/.X11-unix
@@ -30,8 +30,8 @@ sudo docker run \
 	-v $XSOCK:$XSOCK  \
 	-v $XAUTH:$XAUTH \
         --add-host coppeliaSim:127.0.0.1 \
-        --add-host controller:192.168.0.199 \
-        --add-host niryo-desktop:192.168.0.181 \
+        --add-host controller:192.168.0.134 \
+        --add-host ros:192.168.0.181 \
 	coppellia_sim:latest \
 #	bash
   	

@@ -1,4 +1,4 @@
---
+ --
 --    This program is free software: you can redistribute it and/or modify
 --    it under the terms of the GNU General Public License as published by
 --    the Free Software Foundation, either version 3 of the License, or
@@ -120,9 +120,6 @@ function gripperPureSubCallback(msg)
 end
 
 function gripperCommandCallback(msg)
-    if is_pure_subscriber then
-        return 
-    end
     if msg.data then 
         if isGripperOpen then
             print("Gripper already open.")
