@@ -121,18 +121,18 @@ end
 
 function gripperCommandCallback(msg)
     if msg.data then 
-        if isGripperOpen then
+        if isGripperOpen or first then
             print("Gripper already open.")
         else 
             print("Opening gripper.")
-            openGripper()
-            isGripperOpen = true
+            --openGripper()
+            open_gripper = true
         end
     else
-        if isGripperOpen then 
+        if isGripperOpen or first then 
             print("Closing gripper.")
-            closeGripper()
-            isGripperOpen = false
+            --closeGripper()
+            close_gripper = true
         else
             print("Gripper already closed.")
         end
@@ -206,7 +206,7 @@ function sysCall_init()
         SIM_JOINT_STATE_ORDER = SIM_TOPIC_ROOT.."/joint_states_order"
         SIM_SUBS_MODE = SIM_TOPIC_ROOT.."/set_subscriber_mode"
 
-        -- Physical Twin Topics TODO: Gripper
+        -- Physical Twin Topics
         JOINT_STATE_TOPIC = "/joint_states"
 
         -- Gripper Control Topic Names 
@@ -244,7 +244,8 @@ function sysCall_init()
         is_pure_subscriber = true;
 
         -- GripperController --> Receive desired state from a simulation client.
-        isGripperOpen   = true -- Open at startup. TODO: Get from physical twin.
+        isGripperOpen   = true -- Open at startup.
+	first		= true
         open_gripper     = false
         close_gripper    = false
         gripperStatePublisher   = simROS.advertise(gripperStatePub, 'std_msgs/Bool')
