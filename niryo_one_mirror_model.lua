@@ -41,24 +41,6 @@ function setTargetJointPositions(remoteTargetVector)
     end 
 end
 
-function setTargetJointVelocity(targetVector)
-    for i=1,#targetVector do
-        if sim.setJointTargetVelocity(JointHandles[i], targetVector[i]) then
-            print("<font color='#F00'>Cannot set joint to target velocity:  ".. targetVector[i] .." </font>@html")
-        end 
-    end
-end
-
-function setTargetJointForce(targetVector)
-    for i=1,#targetVector do
-        if(targetVector[i] ~= 0) then 
-            if sim.setJointForce(JointHandles[i], targetVector[i]) then
-                print("<font color='#F00'>Cannot set joint to target force:  ".. targetVector[i] .." </font>@html")
-            end 
-        end
-    end
-end
-
 function getJointVelocityVector(targetVel) 
     for i=1,6 do
         targetVel[i] = sim.getJointTargetVelocity(JointHandles[i])
@@ -85,34 +67,10 @@ function phyJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
     -- Update the model and propagate the state variables.
     print("Received joint state update from the physical twin.")  
-    if is_pure_subscriber then 
-        table.insert(state_sequence_buffer, msg.position)
-    else
-        print("Digital twin not in pure subscriber mode.")
-    end
+    table.insert(state_sequence_buffer, msg.position)
 end 
 
-function digJointStateUpdateCallback(msg)
-    -- Received a change on the state of the robot joints. 
-    -- Update the model and propagate the state variables.
-    print("Received joint state update for digital twin.")
-    if (is_pure_subscriber == false) then 
-        table.insert(state_sequence_buffer, msg.position)
-    else 
-        print("Cannot change digital twin if in pure subscriber mode.")
-    end
-end 
-
-function setSubModeCallback(msg)
-    print("Subscriber mode: "..(msg.data and "True" or "False"))
-    is_pure_subscriber = msg.data;
-end
-
-function gripperPureSubCallback(msg)
-    if not is_pure_subscriber then
-        return
-    end 
-
+function gripperJoystickControlCallback(msg)
     open_button     = msg.buttons[3]
     close_button    = msg.buttons[2]
     open_gripper    = (open_button == 1)
@@ -120,22 +78,20 @@ function gripperPureSubCallback(msg)
 end
 
 function gripperCommandCallback(msg)
-    if msg.data then 
-        if isGripperOpen or first then
-            print("Gripper already open.")
-        else 
-            print("Opening gripper.")
-            --openGripper()
-            open_gripper = true
-        end
+    open = msg.data 
+    if isGripperOpen and open then
+        print("Gripper already open.")
+        return
+    else 
+        open_gripper = true
+        return 
+    end
+    if isGripperOpen and not open then 
+        close_gripper = true
+        return 
     else
-        if isGripperOpen or first then 
-            print("Closing gripper.")
-            --closeGripper()
-            close_gripper = true
-        else
-            print("Gripper already closed.")
-        end
+        print("Gripper already closed.")
+        return
     end
 end
 
@@ -161,17 +117,19 @@ function sysCall_actuation()
         })
         if #state_sequence_buffer>0 then
             print("Setting joint positions on digital twin.")
-            new_joint_state = state_sequence_buffer[1] -- Get the first element.
-            table.remove(state_sequence_buffer, 1) -- consume it.
+            new_joint_state = state_sequence_buffer[1]  -- Get the first element.
+            table.remove(state_sequence_buffer, 1)      -- consume it.
             setTargetJointPositions(new_joint_state);
         end
 
         if open_gripper then 
             open_gripper = false
+            print("Opening gripper")
             openGripper()
         end
         if close_gripper then
             close_gripper = false
+            print("Closing gripper")
             closeGripper()
         end
     end
@@ -199,58 +157,43 @@ function sysCall_init()
     if simROS then 
         print("<font color='#0F0'>ROS interface was found.</font>@html")
 
-        -- Digital Twin Topics
-        SIM_TOPIC_ROOT = "/coppeliaSIM/NiryoOne"
-        SIM_TIME_TOPIC = SIM_TOPIC_ROOT.."/simulationTime" 
-        SIM_JOINT_STATE_TOPIC = SIM_TOPIC_ROOT.."/joint_states"
-        SIM_JOINT_STATE_ORDER = SIM_TOPIC_ROOT.."/joint_states_order"
-        SIM_SUBS_MODE = SIM_TOPIC_ROOT.."/set_subscriber_mode"
-
-        -- Physical Twin Topics
-        JOINT_STATE_TOPIC = "/joint_states"
-
+        -- Simulated Twin Topics
+        SIM_TOPIC_ROOT          = "/coppeliaSIM/NiryoOne"
+        SIM_TIME_TOPIC          = SIM_TOPIC_ROOT.."/simulationTime" 
+        SIM_JOINT_STATE_TOPIC   = SIM_TOPIC_ROOT.."/joint_states"
+        SIM_JOINT_STATE_ORDER   = SIM_TOPIC_ROOT.."/joint_states_order"
+        SIM_SUBS_MODE           = SIM_TOPIC_ROOT.."/set_subscriber_mode"
         -- Gripper Control Topic Names 
-        gripperStatePub = SIM_TOPIC_ROOT.."/isGripperOpenPub" 
-        openGripperSub  = SIM_TOPIC_ROOT.."/GripperCommandSub"
+        OPEN_SIM_GRIPPER  = SIM_TOPIC_ROOT.."/GripperCommandSub"
+        SIM_GRIPPER_STATE = SIM_TOPIC_ROOT.."/isGripperOpenPub" 
+        -- Physical Twin Topics
+        JOINT_STATE_TOPIC   = "/joint_states"
+        JOY_TOPIC           = "/joy"
+        TOOL_STATUS         = "/niryo_one/tool_action/status"
 
-        ---------------------------
-        -- Simulation Variables  --
-        ---------------------------
-        -- Simulation time.
-        simTimePub = simROS.advertise(SIM_TIME_TOPIC, 'std_msgs/Float32')
-
-        -- The target angular position we want the joints in.
-        DEFAULT_JOINTS_POSITION = {0.0, 0.640187, -1.397485, 0.0, 0.0, 0.0}
-        targetJointPosition = {0,0,0,0,0,0}
-        setTargetJointPositions(DEFAULT_JOINTS_POSITION) 
-
-        -- TODO: We need to publish the current state of the digital twin as a desired state 
-        --  for the physical. We will assume that the control comes from the LUA script.
-        -- PROBLEM: Control cannot come from the lua script due to the limitations of the environment.
-
-        -- This is a queue to temporarily store the states arriving to the digital twin when in 
-        -- pure subscriber mode. 
+        -- The target angular position we want the joints in is a global variable to be updated
+        -- on callback.
+        targetJointPosition     = {0,0,0,0,0,0} 
+        setTargetJointPositions({0.0, 0.640187, -1.397485, 0.0, 0.0, 0.0}) 
+        -- This is a queue to temporarily store the states arriving to the digital twin
         state_sequence_buffer = {}
 
         -- Physical Twin Mirror --> Mirror state published by the physical twin.
         JointStateSubPhy = simROS.subscribe(JOINT_STATE_TOPIC, 'sensor_msgs/JointState', 'phyJointStateUpdateCallback')
 
         -- Digital Twin Mirror --> Receive desired state from a simulation client and send back 
-        --                         joint state.
-        JointStatePubDig = simROS.advertise(SIM_JOINT_STATE_TOPIC,'sensor_msgs/JointState')
-        JointStateSubDig = simROS.subscribe(SIM_JOINT_STATE_ORDER, 'std_msgs/Float64MultiArray', 'digJointStateUpdateCallback')
-
-        setPureSubscriberSub = simROS.subscribe(SIM_SUBS_MODE, 'std_msgs/Bool', 'setSubModeCallback')
-        is_pure_subscriber = true;
+        --                         joint state of the simulation model.
+        JointStatePubDig        = simROS.advertise(SIM_JOINT_STATE_TOPIC,'sensor_msgs/JointState')
+        gripperStatePublisher   = simROS.advertise(SIM_GRIPPER_STATE,   'std_msgs/Bool')
+        openGripperCommand      = simROS.subscribe(OPEN_SIM_GRIPPER,    'std_msgs/Bool',    'gripperCommandCallback')
+        joystickGripperCommand  = simROS.subscribe(JOY_TOPIC,           'sensor_msgs/Joy',  'gripperJoystickControlCallback')
+        simTimePub              = simROS.advertise(SIM_TIME_TOPIC, 'std_msgs/Float32')
 
         -- GripperController --> Receive desired state from a simulation client.
-        isGripperOpen   = true -- Open at startup.
-	first		= true
-        open_gripper     = false
-        close_gripper    = false
-        gripperStatePublisher   = simROS.advertise(gripperStatePub, 'std_msgs/Bool')
-        openGripperCommand      = simROS.subscribe(openGripperSub, 'std_msgs/Bool', 'gripperCommandCallback')
-        joystickGripperCommand  = simROS.subscribe("/joy", 'sensor_msgs/Joy', 'gripperPureSubCallback')
+        -- We will assume gripper is open at startup. 
+        isGripperOpen = true 
+        open_gripper  = false
+        close_gripper = false
 
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
@@ -259,17 +202,11 @@ end
 
 function sysCall_sensing()
     -- Update additional data structures of the simulation.
-    -- TODO: For now we want a full simulation subscriber of the physical robot.
-    --      We need to send a signal to the JOINT_TRAJECTORY_ACTION_TOPIC.
-
 end
 
 function sysCall_cleanup()
     simROS.shutdownPublisher(simTimePub)
     simROS.shutdownSubscriber(JointStateSubPhy)
-    simROS.shutdownPublisher(JointStatePubDig)
-    simROS.shutdownSubscriber(setPureSubscriberSub)
-    simROS.shutdownSubscriber(JointStateSubDig)
     simROS.shutdownPublisher(gripperStatePublisher)
     simROS.shutdownSubscriber(openGripperCommand)
     simROS.shutdownSubscriber(joystickGripperCommand)
