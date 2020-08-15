@@ -48,13 +48,6 @@ RUN wget http://www.coppeliarobotics.com/files/CoppeliaSim_Pro_V4_0_0_Ubuntu16_0
 # The ROS interface is already compiled, but needs to be copied to the 
 # program root in order to be loaded. 
 RUN cp CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/compiledRosPlugins/libsimExtROSInterface.so CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/libsimExtROSInterface.so 
-# Roscore must be running for the ROS interface to load successfully. 
-#RUN     { echo export ROS_HOSTNAME=$(ip a show eth0 | grep "inet " | awk '{print $2}'); \
-RUN     { echo export ROS_HOSTNAME=192.168.0.161; \
-	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh; } > \
-	/home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh.new && \
-	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh.new > \
-	/home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh && \
-	cat /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh
+# Reminder: Roscore must be running in ROS_MASTER for the ROS interface to load successfully. 
 
 CMD bash -c "source /opt/ros/kinetic/setup.bash && /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh"

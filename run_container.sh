@@ -31,11 +31,13 @@ sudo docker run \
 	-e XAUTHORITY=$XAUTH \
 	-v $XSOCK:$XSOCK  \
 	-v $XAUTH:$XAUTH \
-        --add-host coppeliaSim:127.0.0.1 \
-        --add-host controller:192.168.0.134 \
-        --add-host ROS:192.168.0.181 \
-        --add-host dtwin:192.168.0.134 \
+	--add-host coppeliaSim:127.0.0.1 \
+	--add-host controller:192.168.0.134 \
+	--add-host ROS:192.168.0.181 \
+	--add-host dtwin:192.168.0.134 \
 	coppellia_sim:latest \
+#	bash 
+#--user root \
 
 # LAB Network
 #sudo docker run \

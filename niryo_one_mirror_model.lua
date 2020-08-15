@@ -23,13 +23,23 @@
 ------------------------------------------------------------------
 
 function closeGripper()
-    print("Closing gripper.")
-    sim.setIntegerSignal(gripperName..'_close',1)
+    if isGripperOpen then
+        if DEBUG_LEVEL == 1 then 
+            print("Opening gripper")
+        end 
+        sim.setIntegerSignal(gripperName..'_close',1)
+        isGripperOpen = false
+    end
 end
 
 function openGripper()
-    print("Opening gripper.")
-    sim.clearIntegerSignal(gripperName..'_close')
+    if not isGripperOpen then 
+        if DEBUG_LEVEL == 1 then 
+            print("Closing gripper")
+        end
+        sim.clearIntegerSignal(gripperName..'_close')
+        isGripperOpen = true
+    end 
 end
 
 function setTargetJointPositions(remoteTargetVector)
@@ -66,33 +76,17 @@ end
 function phyJointStateUpdateCallback(msg)
     -- Received a change on the state of the robot joints. 
     -- Update the model and propagate the state variables.
-    print("Received joint state update from the physical twin.")  
     table.insert(state_sequence_buffer, msg.position)
 end 
 
 function gripperJoystickControlCallback(msg)
     open_button     = msg.buttons[3]
     close_button    = msg.buttons[2]
-    open_gripper    = (open_button == 1)
-    close_gripper   = (close_button == 1)
+    open_gripper    = (open_button == 1) and not (close_button == 1)
 end
 
 function gripperCommandCallback(msg)
-    open = msg.data 
-    if isGripperOpen and open then
-        print("Gripper already open.")
-        return
-    else 
-        open_gripper = true
-        return 
-    end
-    if isGripperOpen and not open then 
-        close_gripper = true
-        return 
-    else
-        print("Gripper already closed.")
-        return
-    end
+    open_gripper        = msg.data 
 end
 
 --------------------------
@@ -101,41 +95,29 @@ end
 
 function sysCall_actuation() 
     if simROS then 
-        simROS.publish(gripperStatePublisher,   {data=isGripperOpen})
-        simROS.publish(simTimePub,              {data=sim.getSimulationTime()})
-        
-        pos = {0, 0, 0, 0, 0, 0}
-        vel = {0, 0, 0, 0, 0, 0}
-        eff = {0, 0, 0, 0, 0, 0}
-        getJointPositionVector(pos)
-        getJointVelocityVector(vel)
-        getJointForceVector(eff)
-        simROS.publish(JointStatePubDig, {
-            position = pos, 
-            velocity = vel, 
-            effort   = eff 
-        })
+        -- Actuate last received robot position. 
         if #state_sequence_buffer>0 then
-            print("Setting joint positions on digital twin.")
+            if DEBUG_LEVEL == 1 then 
+                print("Setting joint positions on digital twin.")
+            end 
             new_joint_state = state_sequence_buffer[1]  -- Get the first element.
             table.remove(state_sequence_buffer, 1)      -- consume it.
-            setTargetJointPositions(new_joint_state);
+            setTargetJointPositions(new_joint_state);   -- Actuate.
         end
 
+        -- Actuate gripper state.
         if open_gripper then 
-            open_gripper = false
-            print("Opening gripper")
             openGripper()
-        end
-        if close_gripper then
-            close_gripper = false
-            print("Closing gripper")
+        else
             closeGripper()
         end
     end
 end
 
 function sysCall_init()
+    -- If 0 No debug messages
+    -- If 1 print all trace events. 
+    DEBUG_LEVEL = 0
     -- Generate the handles of the joints to actuate on the robot.
     JointHandles={-1,-1,-1,-1,-1,-1}
     for i=1,6,1 do
@@ -157,15 +139,13 @@ function sysCall_init()
     if simROS then 
         print("<font color='#0F0'>ROS interface was found.</font>@html")
 
-        -- Simulated Twin Topics
         SIM_TOPIC_ROOT          = "/coppeliaSIM/NiryoOne"
-        SIM_TIME_TOPIC          = SIM_TOPIC_ROOT.."/simulationTime" 
+        -- Simulated Twin Topics
+        SIM_TIME_TOPIC          = SIM_TOPIC_ROOT.."/simulation_time" 
         SIM_JOINT_STATE_TOPIC   = SIM_TOPIC_ROOT.."/joint_states"
-        SIM_JOINT_STATE_ORDER   = SIM_TOPIC_ROOT.."/joint_states_order"
-        SIM_SUBS_MODE           = SIM_TOPIC_ROOT.."/set_subscriber_mode"
         -- Gripper Control Topic Names 
-        OPEN_SIM_GRIPPER  = SIM_TOPIC_ROOT.."/GripperCommandSub"
-        SIM_GRIPPER_STATE = SIM_TOPIC_ROOT.."/isGripperOpenPub" 
+        OPEN_SIM_GRIPPER  = SIM_TOPIC_ROOT.."/gripper_command"
+        SIM_GRIPPER_STATE = SIM_TOPIC_ROOT.."/is_gripper_open" 
         -- Physical Twin Topics
         JOINT_STATE_TOPIC   = "/joint_states"
         JOY_TOPIC           = "/joy"
@@ -178,36 +158,68 @@ function sysCall_init()
         -- This is a queue to temporarily store the states arriving to the digital twin
         state_sequence_buffer = {}
 
-        -- Physical Twin Mirror --> Mirror state published by the physical twin.
-        JointStateSubPhy = simROS.subscribe(JOINT_STATE_TOPIC, 'sensor_msgs/JointState', 'phyJointStateUpdateCallback')
-
         -- Digital Twin Mirror --> Receive desired state from a simulation client and send back 
-        --                         joint state of the simulation model.
-        JointStatePubDig        = simROS.advertise(SIM_JOINT_STATE_TOPIC,'sensor_msgs/JointState')
-        gripperStatePublisher   = simROS.advertise(SIM_GRIPPER_STATE,   'std_msgs/Bool')
-        openGripperCommand      = simROS.subscribe(OPEN_SIM_GRIPPER,    'std_msgs/Bool',    'gripperCommandCallback')
-        joystickGripperCommand  = simROS.subscribe(JOY_TOPIC,           'sensor_msgs/Joy',  'gripperJoystickControlCallback')
-        simTimePub              = simROS.advertise(SIM_TIME_TOPIC, 'std_msgs/Float32')
+        --                         joint or tool state of the simulation model.
+        JointStatePubDig        = simROS.advertise(SIM_JOINT_STATE_TOPIC,'sensor_msgs/JointState', 1, false)
+        gripperStatePublisher   = simROS.advertise(SIM_GRIPPER_STATE,   'std_msgs/Bool', 1, false)
+        simTimePub              = simROS.advertise(SIM_TIME_TOPIC, 'std_msgs/Float32', 1, false)
 
+        -- The gripper is non-standard, we need to fetch its state directly from the control 
+        -- code or the joystick command. 
+        openGripperCommand      = simROS.subscribe(OPEN_SIM_GRIPPER,    'std_msgs/Bool',    'gripperCommandCallback', 1)
+        joystickGripperCommand  = simROS.subscribe(JOY_TOPIC,           'sensor_msgs/Joy',  'gripperJoystickControlCallback', 1)
+        -- Physical Twin Mirror --> Mirror state published by the physical twin.
+        JointStateSubPhy        = simROS.subscribe(JOINT_STATE_TOPIC, 'sensor_msgs/JointState', 'phyJointStateUpdateCallback', 1)
+
+        if  JointStatePubDig < 0 or 
+            gripperStatePublisher < 0 or 
+            simTimePub < 0 or
+            openGripperCommand < 0 or 
+            joystickGripperCommand < 0 or 
+            JointStateSubPhy < 0 then 
+                print("<font color='#F00'>Error setting up publishers and subscribers. Stopping simulation.</font>@html")
+                sim.stopSimulation()
+            end
         -- GripperController --> Receive desired state from a simulation client.
         -- We will assume gripper is open at startup. 
-        isGripperOpen = true 
-        open_gripper  = false
-        close_gripper = false
+        isGripperOpen       = true 
+        open_gripper        = true
 
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
+        print("Is the ros master ready and reachable?")
+        sim.stopSimulation()
     end
 end
 
 function sysCall_sensing()
-    -- Update additional data structures of the simulation.
+    if simROS then
+        -- Publish simulation state to the ROS network to consume. 
+        simROS.publish(gripperStatePublisher,   {data=isGripperOpen})
+        simROS.publish(simTimePub,              {data=sim.getSimulationTime()})
+        
+        local pos = {0, 0, 0, 0, 0, 0}
+        local vel = {0, 0, 0, 0, 0, 0}
+        local eff = {0, 0, 0, 0, 0, 0}
+        -- Fetch simulation model joint state
+        getJointPositionVector(pos)
+        getJointVelocityVector(vel)
+        getJointForceVector(eff)
+
+        simROS.publish(JointStatePubDig, {
+            position = pos, 
+            velocity = vel, 
+            effort   = eff 
+        })
+    end
 end
 
 function sysCall_cleanup()
     simROS.shutdownPublisher(simTimePub)
-    simROS.shutdownSubscriber(JointStateSubPhy)
     simROS.shutdownPublisher(gripperStatePublisher)
+    simROS.shutdownPublisher(JointStatePubDig)
+    
+    simROS.shutdownSubscriber(JointStateSubPhy)
     simROS.shutdownSubscriber(openGripperCommand)
     simROS.shutdownSubscriber(joystickGripperCommand)
 end
