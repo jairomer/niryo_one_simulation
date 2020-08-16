@@ -187,7 +187,6 @@ function sysCall_init()
         -- Physical Twin Topics
         JOINT_STATE_TOPIC   = "/joint_states"
         JOY_TOPIC           = "/joy"
-        TOOL_STATUS         = "/niryo_one/tool_action/status"
 
         -- The target angular position we want the joints in is a global variable to be updated
         -- on callback.
