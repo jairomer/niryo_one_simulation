@@ -52,12 +52,18 @@ function setTargetJointPositions(remoteTargetVector)
 end
 
 function getJointVelocityVector(targetVel) 
-    for i=1,6 do
-        targetVel[i] = sim.getJointTargetVelocity(JointHandles[i])
+    step = sim.getSimulationTimeStep()
+    if step == -1 then 
+        print("<font color='#F00'>Could not get simulation time step. </font>@html")
+        return
     end
-end 
+    for i=1,6 do
+        targetVel[i] = (previousJointPosition[i]-targetJointPosition[i])/step
+    end
+end
 
 function getJointPositionVector(targetJointPosition) 
+    previousJointPosition = targetJointPosition
     for i=1,6 do
         targetJointPosition[i] = sim.getJointPosition(JointHandles[i])
     end
@@ -68,6 +74,38 @@ function getJointForceVector(targetJointForce)
         targetJointForce[i] = sim.getJointForce(JointHandles[i])
     end
 end
+
+
+function get_array_string(arr) 
+    str = "[ "..tonumber(string.format("%.4f", arr[1]))
+    for i=2,#arr do
+        if (i==#arr) then 
+            str = str..", "..tonumber(string.format("%.4f", arr[i])).." ]"
+        else
+            str = str..", "..tonumber(string.format("%.4f", arr[i]))
+        end 
+    end
+    return str
+end 
+
+
+function print_simulation_status(pos, vel, eff, openGripper)
+
+    pos_str = get_array_string(pos)
+    vel_str = get_array_string(vel)
+    eff_str = get_array_string(eff)
+    griper_str = function(b) if b then return "yes" else return "no" end end
+    sim_time = tonumber(string.format("%.4f", sim.getSimulationTime())) -- Time in seconds 
+
+    print("#######################################################")
+    print("Simulation has been running for "..sim_time.." seconds.")
+    print("Is gripper open? -> "..griper_str(openGripper))
+    print("Joint arm kinematics: ")
+    print("  Positions: "..pos_str)
+    print("  Velocities: "..vel_str)
+    print("  Efforts: "..eff_str)
+end
+
 
 --------------------------
 -- SUBSCRIBER CALLBACKS --
@@ -154,6 +192,7 @@ function sysCall_init()
         -- The target angular position we want the joints in is a global variable to be updated
         -- on callback.
         targetJointPosition     = {0,0,0,0,0,0} 
+        previousJointPosition   = targetJointPosition
         setTargetJointPositions({0.0, 0.640187, -1.397485, 0.0, 0.0, 0.0}) 
         -- This is a queue to temporarily store the states arriving to the digital twin
         state_sequence_buffer = {}
@@ -184,7 +223,7 @@ function sysCall_init()
         -- We will assume gripper is open at startup. 
         isGripperOpen       = true 
         open_gripper        = true
-
+        print_time          = 0
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
         print("Is the ros master ready and reachable?")
@@ -211,6 +250,12 @@ function sysCall_sensing()
             velocity = vel, 
             effort   = eff 
         })
+
+        if (print_time + 0.5  <= sim.getSimulationTime()) then 
+            print_simulation_status(pos, vel, eff, isGripperOpen)
+            print_time = sim.getSimulationTime()
+        end
+        
     end
 end
 
