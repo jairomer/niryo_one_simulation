@@ -14,7 +14,7 @@ ROS_IP="192.168.0.134"
 XAUTH_KEYS_="$(xauth list $HOST/unix:0)"
 XSOCK=/tmp/.X11-unix
 XAUTH=/tmp/.docker.xauth
-sudo docker build . -t coppellia_sim --build-arg XAUTH_KEYS_=$XAUTH_KEYS_
+sudo docker build . -t coppellia_sim --build-arg "XAUTH_KEYS_=$XAUTH_KEYS_"
 
 rm $XAUTH && touch $XAUTH
 xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
