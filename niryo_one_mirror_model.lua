@@ -120,11 +120,15 @@ end
 function gripperJoystickControlCallback(msg)
     open_button     = msg.buttons[3]
     close_button    = msg.buttons[2]
-    open_gripper    = (open_button == 1) and not (close_button == 1)
 end
 
 function gripperCommandCallback(msg)
-    open_gripper        = msg.data 
+    open_gripper = msg.data 
+    if (open_gripper) then
+        open_gripper()
+    else
+        closeGripper() 
+    end
 end
 
 --------------------------
@@ -144,10 +148,13 @@ function sysCall_actuation()
         end
 
         -- Actuate gripper state.
-        if open_gripper then 
+        if open_button==1 then 
             openGripper()
-        else
+            open_button = 0
+        end
+        if close_button==1 then 
             closeGripper()
+            close_button = 0
         end
     end
 end
@@ -222,6 +229,8 @@ function sysCall_init()
         -- We will assume gripper is open at startup. 
         isGripperOpen       = true 
         open_gripper        = true
+        open_button         = 0
+        close_button        = 0
         print_time          = 0
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
