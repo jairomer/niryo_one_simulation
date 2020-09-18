@@ -44,10 +44,10 @@ WORKDIR /home/dtwin
 RUN rosdep update && mkdir -p catkin_ws/src && cd catkin_ws && catkin init && cd ..
 
 # Download CoppeliaSim
-RUN wget http://www.coppeliarobotics.com/files/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04.tar.xz && tar xvvf CoppeliaSim_Pro_V4_0_0_Ubuntu16_04.tar.xz 
+RUN wget https://www.coppeliarobotics.com/files/CoppeliaSim_Pro_V4_1_0_Ubuntu16_04.tar.xz && tar xvvf CoppeliaSim_Pro_V4_1_0_Ubuntu16_04.tar.xz 
 # The ROS interface is already compiled, but needs to be copied to the 
 # program root in order to be loaded. 
-RUN cp CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/compiledRosPlugins/libsimExtROSInterface.so CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/libsimExtROSInterface.so 
+#RUN cp CoppeliaSim_Pro_V4_1_0_Ubuntu16_04/compiledRosPlugins/libsimExtROSInterface.so CoppeliaSim_Pro_V4_1_0_Ubuntu16_04/libsimExtROSInterface.so 
 # Reminder: Roscore must be running in ROS_MASTER for the ROS interface to load successfully. 
 
-CMD bash -c "source /opt/ros/kinetic/setup.bash && /home/dtwin/CoppeliaSim_Pro_V4_0_0_Ubuntu16_04/coppeliaSim.sh"
+CMD bash -c "source /opt/ros/kinetic/setup.bash && /home/dtwin/CoppeliaSim_Pro_V4_1_0_Ubuntu16_04/coppeliaSim.sh"

@@ -58,7 +58,8 @@ function getJointVelocityVector(targetVel)
         return
     end
     for i=1,6 do
-        targetVel[i] = (previousJointPosition[i]-targetJointPosition[i])/step
+        -- targetVel[i] = (previousJointPosition[i]-targetJointPosition[i])/step
+        targetVel[i] = 0
     end
 end
 
